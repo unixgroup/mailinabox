@@ -122,8 +122,12 @@ def write_nsd_zone(domain, zonefile, records, env):
 	# We set the administrative email address for every domain to domain_contact@[domain.com].
 	# You should probably create an alias to your email address.
 
+	# On the $ORIGIN line, there's typically a ';' comment at the end explaining
+	# what the $ORIGIN line does. Any further data after the domain confuses
+	# ldns-signzone, however. It used to say '; default zone domain'.
+
 	zone = """
-$ORIGIN {domain}.    ; default zone domain
+$ORIGIN {domain}.
 $TTL 86400           ; default time to live
 
 @ IN SOA ns1.{primary_domain}. hostmaster.{primary_domain}. (
@@ -257,16 +261,23 @@ def sign_zone(domain, zonefile, env):
 	#
 	# Use os.umask and open().write() to securely create a copy that only
 	# we (root) can read.
-	os.umask (0o77)
 	files_to_kill = []
 	for key in ("KSK", "ZSK"):
+		if dnssec_keys.get(key, "").strip() == "": raise Exception("DNSSEC is not properly set up.")
+
 		oldkeyfn = os.path.join(env['STORAGE_ROOT'], 'dns/dnssec/' + dnssec_keys[key])
+		if not os.path.exists(oldkeyfn + ".private"): raise Exception("DNSSEC is not properly set up.")
+
 		newkeyfn = '/tmp/' + dnssec_keys[key]
 		dnssec_keys[key] = newkeyfn
 		with open(oldkeyfn + ".private", "r") as fr:
 			fn = newkeyfn + ".private"
-			with open(fn, "w") as fw:
-				fw.write(fr.read())
+			prev_umask = os.umask(0o77) # ensure written file is not world-readable
+			try:
+				with open(fn, "w") as fw:
+					fw.write(fr.read())
+			finally:
+				os.umask(prev_umask) # other files we write should be world-readable
 			files_to_kill.append(fn)
 
 	# Do the signing.
