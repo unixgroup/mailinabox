@@ -58,6 +58,14 @@ def dns_update():
 	except Exception as e:
 		return (str(e), 500)
 
+@app.route('/dns/ds')
+def dns_get_ds_record():
+	from dns_update import get_ds_record
+	try:
+		return get_ds_record(env)
+	except Exception as e:
+		return (str(e), 500)
+
 # System
 
 @app.route('/system/updates')

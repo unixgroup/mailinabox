@@ -303,6 +303,17 @@ def sign_zone(domain, zonefile, env):
 
 	# Update the zone's filename so nsd.conf uses the signed file.
 	return zonefile + ".signed"
+
+########################################################################
+
+def get_ds_record(env):
+	# Get the current KSK file in use.
+	dnssec_keys = load_env_vars_from_file(os.path.join(env['STORAGE_ROOT'], 'dns/dnssec/keys.conf'))
+	if dnssec_keys.get("KSK", "").strip() == "": raise Exception("DNSSEC is not properly set up: No KSK key set.")
+	keyfn = os.path.join(env['STORAGE_ROOT'], 'dns/dnssec/' + dnssec_keys["KSK"] + ".ds")
+	if not os.path.exists(keyfn): raise Exception("DNSSEC is not properly set up: KSK file is missing.")
+	with open(keyfn, "r") as fr:
+		return fr.read()
 	
 ########################################################################
 
