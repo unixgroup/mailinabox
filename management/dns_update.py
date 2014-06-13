@@ -7,7 +7,7 @@ import os, os.path, urllib.parse, datetime, re
 from mailconfig import get_mail_domains
 from utils import shell, load_env_vars_from_file
 
-def do_dns_update(env):
+def get_dns_domains(env):
 	# What domains should we serve DNS for?
 	domains = set()
 
@@ -16,11 +16,18 @@ def do_dns_update(env):
 
 	# Add all domain names in use by email users and mail aliases.
 	domains |= get_mail_domains(env)
-	
+
 	# Make a nice and safe filename for each domain.
 	zonefiles = []
 	for domain in domains:
 		zonefiles.append([domain, urllib.parse.quote(domain, safe='') + ".txt"])
+
+	return zonefiles
+	
+
+def do_dns_update(env):
+	# What domains (and their zone filenames) should we build?
+	zonefiles = get_dns_domains(env)
 
 	# Write zone files.
 	os.makedirs('/etc/nsd/zones', exist_ok=True)
@@ -250,32 +257,31 @@ zone:
 def sign_zone(domain, zonefile, env):
 	dnssec_keys = load_env_vars_from_file(os.path.join(env['STORAGE_ROOT'], 'dns/dnssec/keys.conf'))
 
-	# In order to use the same keys for all domains, we have to fool
-	# ldns-signzone a bit. If we use the files in place, ldns-signzone
-	# will look at the .key file (which has the public DNSKEY record)
-	# but it will get confused because the domain in the file (_domain_)
-	# won't match the zone. (Replacing "_domain_" with the domain doesn't
-	# seem to actually fix it.) But if we copy the .private file to
-	# a location that has no corresponding .key file, ldns-signzone will
-	# just regenerate the public key and be fine.
+	# In order to use the same keys for all domains, we have to generate
+	# a new .key file with a DNSSEC record for the specific domain. We
+	# can reuse the same key, but it won't validate without a DNSSEC
+	# record specifically for the domain.
+	# 
+	# Copy the .key and .private files to /tmp to patch them up.
 	#
 	# Use os.umask and open().write() to securely create a copy that only
 	# we (root) can read.
 	files_to_kill = []
 	for key in ("KSK", "ZSK"):
 		if dnssec_keys.get(key, "").strip() == "": raise Exception("DNSSEC is not properly set up.")
-
 		oldkeyfn = os.path.join(env['STORAGE_ROOT'], 'dns/dnssec/' + dnssec_keys[key])
-		if not os.path.exists(oldkeyfn + ".private"): raise Exception("DNSSEC is not properly set up.")
-
-		newkeyfn = '/tmp/' + dnssec_keys[key]
+		newkeyfn = '/tmp/' + dnssec_keys[key].replace("_domain_", domain)
 		dnssec_keys[key] = newkeyfn
-		with open(oldkeyfn + ".private", "r") as fr:
-			fn = newkeyfn + ".private"
+		for ext in (".private", ".key"):
+			if not os.path.exists(oldkeyfn + ext): raise Exception("DNSSEC is not properly set up.")
+			with open(oldkeyfn + ext, "r") as fr:
+				keydata = fr.read()
+			keydata = keydata.replace("_domain_", domain) # trick ldns-signkey into letting our generic key be used by this zone
+			fn = newkeyfn + ext
 			prev_umask = os.umask(0o77) # ensure written file is not world-readable
 			try:
 				with open(fn, "w") as fw:
-					fw.write(fr.read())
+					fw.write(keydata)
 			finally:
 				os.umask(prev_umask) # other files we write should be world-readable
 			files_to_kill.append(fn)
@@ -297,6 +303,18 @@ def sign_zone(domain, zonefile, env):
 		dnssec_keys["ZSK"],
 	])
 
+	# Create a DS record based on the patched-up key files. The DS record is specific to the
+	# zone being signed, so we can't use the .ds files generated when we created the keys.
+	# The DS record points to the KSK only. Write this next to the zone file so we can
+	# get it later to give to the user with instructions on what to do with it.
+	rr_ds = shell('check_output', ["/usr/bin/ldns-key2ds",
+		"-n", # output to stdout
+		"-2", # SHA256
+		dnssec_keys["KSK"] + ".key"
+	])
+	with open("/etc/nsd/zones/" + zonefile + ".ds", "w") as f:
+		f.write(rr_ds)
+
 	# Remove our temporary file.
 	for fn in files_to_kill:
 		os.unlink(fn)
@@ -306,14 +324,16 @@ def sign_zone(domain, zonefile, env):
 
 ########################################################################
 
-def get_ds_record(env):
-	# Get the current KSK file in use.
-	dnssec_keys = load_env_vars_from_file(os.path.join(env['STORAGE_ROOT'], 'dns/dnssec/keys.conf'))
-	if dnssec_keys.get("KSK", "").strip() == "": raise Exception("DNSSEC is not properly set up: No KSK key set.")
-	keyfn = os.path.join(env['STORAGE_ROOT'], 'dns/dnssec/' + dnssec_keys["KSK"] + ".ds")
-	if not os.path.exists(keyfn): raise Exception("DNSSEC is not properly set up: KSK file is missing.")
-	with open(keyfn, "r") as fr:
-		return fr.read()
+def get_ds_records(env):
+	zonefiles = get_dns_domains(env)
+	ret = ""
+	for domain, zonefile in zonefiles:
+		fn = "/etc/nsd/zones/" + zonefile + ".ds"
+		if os.path.exists(fn):
+			with open(fn, "r") as fr:
+				ret += fr.read().strip() + "\n"
+	return ret
+	
 	
 ########################################################################
 

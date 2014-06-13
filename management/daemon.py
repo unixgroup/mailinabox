@@ -59,10 +59,10 @@ def dns_update():
 		return (str(e), 500)
 
 @app.route('/dns/ds')
-def dns_get_ds_record():
-	from dns_update import get_ds_record
+def dns_get_ds_records():
+	from dns_update import get_ds_records
 	try:
-		return get_ds_record(env)
+		return get_ds_records(env)
 	except Exception as e:
 		return (str(e), 500)
 
