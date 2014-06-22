@@ -22,7 +22,7 @@ if [ -d $STORAGE_ROOT/www/static ]; then mv $STORAGE_ROOT/www/static $STORAGE_RO
 mkdir -p $STORAGE_ROOT/www/default
 if [ ! -f STORAGE_ROOT/www/default/index.html ]; then
 	cp conf/www_default.html $STORAGE_ROOT/www/default/index.html
-	chown -R $STORAGE_USER $STORAGE_ROOT/www/default/index.html
+	chown $STORAGE_USER $STORAGE_ROOT/www/default/index.html
 fi
 
 # Create an init script to start the PHP FastCGI daemon and keep it
@@ -31,9 +31,16 @@ rm -f /etc/init.d/php-fastcgi
 ln -s $(pwd)/conf/phpfcgi-initscript /etc/init.d/php-fastcgi
 update-rc.d php-fastcgi defaults
 
-# Put our webfinger server script into a well-known location.
-cp tools/webfinger.php /usr/local/bin/mailinabox-webfinger.php
-chown www-data.www-data /usr/local/bin/mailinabox-webfinger.php
+# Put our Webfinger and Personal scripts into a well-known location.
+# We have to copy it because it may not be readable by the www-data
+# user in its location here.
+for service in webfinger persona; do
+	cp services/$service.php /usr/local/bin/mailinabox-$service.php
+	chown www-data.www-data /usr/local/bin/mailinabox-$service.php
+done
+
+# Create some space for users to put in their desired webfinger response
+# by email address.
 mkdir -p $STORAGE_ROOT/webfinger/acct;
 chown -R $STORAGE_USER $STORAGE_ROOT/webfinger
 

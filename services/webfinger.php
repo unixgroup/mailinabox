@@ -1,4 +1,10 @@
 <?php
+	/* Webfinger
+	 * *********
+	 * Outputs a JSON Resource Descriptor for a resource
+	 * (typically an acct:email@address.com URI).
+	 */
+
 	$resource = $_GET['resource'];
 
 	// Parse our configuration file to get the STORAGE_ROOT.
@@ -34,9 +40,5 @@
 
 	header("Content-type: application/json");
 	echo file_get_contents($fn);
-
-	//json_encode(array(
-	//	subject => $resource,
-	//), JSON_PRETTY_PRINT);
 ?>
 
