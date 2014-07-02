@@ -1,4 +1,4 @@
-import os.path
+import os.path, subprocess
 
 CONF_DIR = os.path.join(os.path.dirname(__file__), "../conf")
 
@@ -121,11 +121,12 @@ def is_pid_valid(pid):
     else:
         return True
 
-def shell(method, cmd_args, env={}, capture_stderr=False, return_bytes=False, trap=False, input=None):
-    # A safe way to execute processes.
-    # Some processes like apt-get require being given a sane PATH.
-    import subprocess
+def shell(method, cmd_args, env={}, capture_stderr=False, return_bytes=False, trap=False,
+    input=None, stdin=subprocess.DEVNULL):
 
+    # A safe way to execute processes.
+
+    # Some processes like apt-get require being given a sane PATH.
     env.update({ "PATH": "/sbin:/bin:/usr/sbin:/usr/bin" })
     kwargs = {
         'env': env,
@@ -133,6 +134,10 @@ def shell(method, cmd_args, env={}, capture_stderr=False, return_bytes=False, tr
     }
     if method == "check_output" and input is not None:
         kwargs['input'] = input
+    else:
+        kwargs['stdin'] = stdin
+
+    #print(method, "".join(("%s=%s " % kv) for kv in env.items()) + " ".join(cmd_args))
 
     if not trap:
         ret = getattr(subprocess, method)(cmd_args, **kwargs)
