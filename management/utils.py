@@ -1,4 +1,4 @@
-import os.path, subprocess
+import os, os.path, subprocess
 
 CONF_DIR = os.path.join(os.path.dirname(__file__), "../conf")
 
@@ -159,3 +159,11 @@ def create_syslog_handler():
     handler = logging.handlers.SysLogHandler(address='/dev/log')
     handler.setLevel(logging.WARNING)
     return handler
+
+def create_file_with_mode(path, mode):
+    # Based on answer by A-B-B: http://stackoverflow.com/a/15015748
+    old_umask = os.umask(0)
+    try:
+        return os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT, mode), 'w')
+    finally:
+        os.umask(old_umask)

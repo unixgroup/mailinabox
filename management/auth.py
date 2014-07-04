@@ -5,6 +5,8 @@ from flask import make_response
 DEFAULT_KEY_PATH   = '/var/lib/mailinabox/api.key'
 DEFAULT_AUTH_REALM = 'Mail-in-a-Box Management Server'
 
+from utils import create_file_with_mode
+
 class KeyAuthService:
 	"""Generate an API key for authenticating clients
 
@@ -24,13 +26,6 @@ class KeyAuthService:
 		authorized to access the API by granting group/ACL read permissions on
 		the key file.
 		"""
-		def create_file_with_mode(path, mode):
-			# Based on answer by A-B-B: http://stackoverflow.com/a/15015748
-			old_umask = os.umask(0)
-			try:
-				return os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT, mode), 'w')
-			finally:
-				os.umask(old_umask)
 
 		os.makedirs(os.path.dirname(self.key_path), exist_ok=True)
 

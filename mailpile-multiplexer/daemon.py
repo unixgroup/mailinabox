@@ -9,7 +9,7 @@
 # When a user logs in, a new Mailpile instance is forked and we
 # proxy to that Mailpile for that user's session.
 
-import sys, os, os.path, re, urllib.request
+import sys, os, os.path, re, urllib.request, urllib.parse, urllib.error, time
 
 from flask import Flask, request, session, render_template, redirect, abort
 app = Flask(__name__)
@@ -62,7 +62,9 @@ def mailpile():
 
 @app.route('/mailpile/<path:path>', methods=['GET', 'POST'])
 def mailpile2(path):
-	# If the user is not logged in, show a login form.
+	# On inside pages, if the user is not logged in, then we can't
+	# really safely redirect to a login page because we don't know
+	# what sort of resource is being requested.
 	if "auth" not in session:
 		abort(403)
 	else:
@@ -117,20 +119,33 @@ def proxy_request_to_mailpile(path):
 
 	# Munge the headers. (http://www.snip2code.com/Snippet/45977/Simple-Flask-Proxy/)
 	headers = dict([(key.upper(), value) for key, value in request.headers.items() if key.upper() != "HOST"])
-	if request.method == "POST" and 'CONTENT-LENGTH' not in headers or not headers['CONTENT-LENGTH']:
-		headers['CONTENT-LENGTH'] = str(len(request.data))
+
+	# Is this a POST? Re-create the request body.
+	data = None
+	if request.method == "POST":
+		data = urllib.parse.urlencode(list(request.form.items(multi=True)), encoding='utf8').encode('utf8')
+		headers['CONTENT-LENGTH'] = str(len(data))
 
 	# Configure request.
 	req = urllib.request.Request(
 		"http://localhost:%d%s" % (port, path),
-		request.data if request.method == "POST" else None,
+		data,
 		headers=headers,
 		)
-	
+
 	# Execute request.
-	response = urllib.request.urlopen(req)
-	body = response.read()
-	headers = dict(response.getheaders())
+	try:
+		response = urllib.request.urlopen(req)
+		body = response.read()
+		headers = dict(response.getheaders())
+		content_type = response.getheader("content-type", default="")
+		response_status = response.status
+	except urllib.error.HTTPError as e:
+		# Exceptions (400s, 500s, etc) are response objects too?
+		body = e.read()
+		headers = dict(e.headers)
+		content_type = "?/?" # don't do any munging
+		response_status = e.code
 
 	# Munge the response.
 
@@ -143,22 +158,33 @@ def proxy_request_to_mailpile(path):
 			return b'/mailpile' + href2.encode("utf8")
 		return href
 
-	if response.getheader("content-type", default="").startswith("text/html"):
+	if content_type.startswith("text/html"):
 		# Rewrite URLs in HTML responses.
 		body = re.sub(rb" (href|src|HREF|SRC)=('[^']*'|\"[^\"]*\")",
 			lambda m : b' ' + m.group(1) + b'=' + m.group(2)[0:1] + rewrite_url(m.group(2)[1:-1]) + m.group(2)[0:1],
 			body)
 
-	if response.getheader("content-type", default="").startswith("text/css"):
+	if content_type.startswith("text/css"):
 		# Rewrite URLs in CSS responses.
 		body = re.sub(rb"url\('([^)]*)'\)", lambda m : b"url('" + rewrite_url(m.group(1)) + b"')", body)
 
-	if response.getheader("content-type", default="").startswith("text/javascript"):
+	if content_type.startswith("text/javascript"):
 		# Rewrite URLs in Javascript responses.
 		body = re.sub(rb"/(?:api|async)[/\w]*", lambda m : rewrite_url(m.group(0)), body)
+		body = re.sub(rb"((?:message_draft|message_sent|tags)\s+:\s+\")([^\"]+)", lambda m : m.group(1) + rewrite_url(m.group(2)), body)
+
+	#if content_type == "application/json":
+	#	body = json.loads(body.decode('utf8'))
+	#	def procobj(obj, is_urls=False):
+	#		if not isinstance(obj, dict): return
+	#		for k, v in obj.items():
+	#			if is_urls: obj[k] = rewrite_url(v.encode('utf8')).decode('utf8')
+	#			procobj(v, is_urls=(k == "urls"))
+	#	procobj(body)
+	#	body = json.dumps(body).encode('utf8')
 
 	# Pass back response to the client.
-	return (body, response.status, headers)
+	return (body, response_status, headers)
 
 def get_mailpile_port(emailaddr):
 	if emailaddr not in running_mailpiles:
@@ -206,10 +232,15 @@ def spawn_mailpile(emailaddr):
 			os.path.join(os.path.dirname(__file__), '../externals/Mailpile/mp'),
 			"--www",
 			"--set", "sys.http_port=%d" % port,
+			"--set", "profiles.0.email=%s" % emailaddr,
+			"--set", "profiles.0.name=%s" % emailaddr,
 		],
 		stdin=pipe_w,
 		env={ "MAILPILE_HOME": mp_home }
 	)
+
+	# Give mailpile time to start before trying to send over a request.
+	time.sleep(3)
 
 	return port
 
@@ -223,8 +254,17 @@ if __name__ == '__main__':
 	if not app.debug:
 		app.logger.addHandler(utils.create_syslog_handler())
 
-	# Secret key (generate a fresh one on each run, invalidating any sessions)
-	app.secret_key = os.urandom(24)
+	# Secret key.
+	key_file = "/tmp/mailpile-multiplexer-key"
+	try:
+		import base64
+		with open(key_file, "rb") as f:
+			app.secret_key = base64.b64decode(f.read().strip())
+	except IOError:
+		# Generate a fresh secret key, invalidating any sessions.
+		app.secret_key = os.urandom(24)
+		with utils.create_file_with_mode(key_file, 0o640) as f:
+			f.write(base64.b64encode(app.secret_key).decode('ascii') + "\n")
 
 	# Start
 
