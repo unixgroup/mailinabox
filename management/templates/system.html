@@ -1,0 +1,56 @@
+<h2>System Checks</h2>
+
+<style>
+#system-checks .heading td {
+  font-weight: bold;
+  font-size: 120%;
+}
+#system-checks .error td {
+  color: #733;
+}
+#system-checks .ok td {
+  color: #030;
+}
+#system-checks .pre {
+  margin: 1em;
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+</style>
+
+<table id="system-checks" class="table" style="max-width: 60em">
+  <thead>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+
+<script>
+function show_system() {
+  $('#system-checks tbody').html("<tr><td colspan='2' class='text-muted'>Loading...</td></tr>")
+  api(
+    "/system/status",
+    "POST",
+    { },
+    function(r) {
+      console.log(r)
+      $('#system-checks tbody').html("");
+      for (var i = 0; i < r.length; i++) {
+        var n = $("<tr><td class='status'/><td class='message'><p style='margin: 0'/><div/></tr>");
+        n.addClass(r[i].type)
+        if (r[i].type == "ok") n.find('td.status').text("✓")
+        if (r[i].type == "error") n.find('td.status').text("✖")
+        n.find('td.message p').text(r[i].text)
+        $('#system-checks tbody').append(n);
+
+        for (var j = 0; j < r[i].extra.length; j++) {
+          n.find('> td.message > div').css({ marginTop: "1em" });
+          var m = $("<div style='max-width: 50em; word-wrap: break-word;'/>").text(r[i].extra[j].text)
+          if (r[i].extra[j].monospace)
+            m.addClass("pre");
+          n.find('> td.message > div').append(m);
+        }
+      }
+    })
+}
+</script>
