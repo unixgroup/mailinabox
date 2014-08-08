@@ -5,7 +5,6 @@ import os, os.path, re, json, base64
 from functools import wraps
 
 from flask import Flask, request, render_template, abort, Response
-app = Flask(__name__)
 
 import auth, utils
 from mailconfig import get_mail_users, add_mail_user, set_mail_password, remove_mail_user
@@ -15,6 +14,15 @@ from mailconfig import get_mail_aliases, get_mail_domains, add_mail_alias, remov
 env = utils.load_environment()
 
 auth_service = auth.KeyAuthService()
+
+# We may deploy via a symbolic link, which confuses flask's template finding.
+me = __file__
+try:
+	me = os.readlink(__file__)
+except OSError:
+	pass
+
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(me), "templates"))
 
 # Decorator to protect views that require authentication.
 def authorized_personnel_only(viewfunc):
