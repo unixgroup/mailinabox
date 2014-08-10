@@ -52,15 +52,54 @@ def get_mail_users(env, as_json=False):
 	if not as_json:
 		return [row[0] for row in c.fetchall()]
 	else:
+		aliases = get_mail_alias_map(env)
 		return [
-			{ "email": row[0], "privileges": parse_privs(row[1]) }
+			{
+				"email": row[0],
+				"privileges": parse_privs(row[1]),
+				"status": "active",
+				"aliases": [
+					(alias, sorted(evaluate_mail_alias_map(alias, aliases, env)))
+					for alias in aliases.get(row[0].lower(), [])
+					]
+			}
 			for row in c.fetchall()
 			 ]
+
+def get_archived_mail_users(env):
+	real_users = set(get_mail_users(env))
+	root = os.path.join(env['STORAGE_ROOT'], 'mail/mailboxes')
+	ret = []
+	for domain_enc in os.listdir(root):
+		for user_enc in os.listdir(os.path.join(root, domain_enc)):
+			email = utils.unsafe_domain_name(user_enc) + "@" + utils.unsafe_domain_name(domain_enc)
+			if email in real_users: continue
+			ret.append({
+				"email": email, 
+				"privileges": "",
+				"status": "inactive"
+			})
+	return ret
 
 def get_mail_aliases(env):
 	c = open_database(env)
 	c.execute('SELECT source, destination FROM aliases')
 	return [(row[0], row[1]) for row in c.fetchall()]
+
+def get_mail_alias_map(env):
+	aliases = { }
+	for alias, targets in get_mail_aliases(env):
+		for em in targets.split(","):
+			em = em.strip().lower()
+			aliases.setdefault(em, []).append(alias)
+	return aliases
+
+def evaluate_mail_alias_map(email, aliases,  env):
+	ret = set()
+	for alias in aliases.get(email.lower(), []):
+		ret.add(alias)
+		ret |= evaluate_mail_alias_map(alias, aliases, env)
+	return ret
 
 def get_mail_domains(env, filter_aliases=lambda alias : True):
 	def get_domain(emailaddr):

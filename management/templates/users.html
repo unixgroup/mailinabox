@@ -1,10 +1,17 @@
 <h2>Users</h2>
 
+<style>
+#user_table tr.account_inactive td { color: #888; text-decoration: line-through; }
+#user_table .aliases { margin: .25em 0 0 1em; font-size: 95%; }
+#user_table .aliases div:before { content: "⇖ "; }
+#user_table .aliases div {  }
+</style>
+
 <table id="user_table" class="table">
   <thead>
     <tr>
-      <td>Email Address</td>
-      <td>Privileges</td>
+      <th>Email Address</th>
+      <th>Privileges</th>
     </tr>
   </thead>
   <tbody>
@@ -21,9 +28,19 @@ function show_users() {
     function(r) {
       $('#user_table tbody').html("");
       for (var i = 0; i < r.length; i++) {
-        var n = $("<tr><td class='email'/><td class='privs'/></tr>");
-        n.find('td.email').text(r[i].email)
+        var n = $("<tr><td class='email'><div class='address'/><div class='aliases' style='display: none'/><td class='privs'/></tr>");
+        n.addClass("account_" + r[i].status);
+        n.find('td.email .address').text(r[i].email)
         n.find('td.privs').text(r[i].privileges)
+        if (r[i].aliases && r[i].aliases.length > 0) {
+          n.find('.aliases').show();
+          for (var j = 0; j < r[i].aliases.length; j++) {
+            n.find('td.email .aliases').append($("<div/>").text(
+              r[i].aliases[j][0]
+              + (r[i].aliases[j][1].length > 0 ? " ⇐ " + r[i].aliases[j][1].join(", ") : "")
+              ))
+          }
+        }
         $('#user_table tbody').append(n);
       }
     })

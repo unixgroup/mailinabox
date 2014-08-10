@@ -7,7 +7,7 @@ from functools import wraps
 from flask import Flask, request, render_template, abort, Response
 
 import auth, utils
-from mailconfig import get_mail_users, add_mail_user, set_mail_password, remove_mail_user
+from mailconfig import get_mail_users, add_mail_user, set_mail_password, remove_mail_user, get_archived_mail_users
 from mailconfig import get_mail_user_privileges, add_remove_mail_user_privilege
 from mailconfig import get_mail_aliases, get_mail_domains, add_mail_alias, remove_mail_alias
 
@@ -22,7 +22,7 @@ try:
 except OSError:
 	pass
 
-app = Flask(__name__, template_folder=os.path.join(os.path.dirname(me), "templates"))
+app = Flask(__name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(me), "templates")))
 
 # Decorator to protect views that require authentication.
 def authorized_personnel_only(viewfunc):
@@ -118,7 +118,7 @@ def login():
 @authorized_personnel_only
 def mail_users():
 	if request.args.get("format", "") == "json":
-		return json_response(get_mail_users(env, as_json=True))
+		return json_response(get_mail_users(env, as_json=True) + get_archived_mail_users(env))
 	else:
 		return "".join(x+"\n" for x in get_mail_users(env))
 
@@ -249,6 +249,7 @@ def do_updates():
 
 if __name__ == '__main__':
 	if "DEBUG" in os.environ: app.debug = True
+	if "APIKEY" in os.environ: auth_service.key = os.environ["APIKEY"]
 
 	if not app.debug:
 		app.logger.addHandler(utils.create_syslog_handler())
