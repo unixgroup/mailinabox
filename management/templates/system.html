@@ -11,6 +11,14 @@
 #system-checks .ok td {
   color: #030;
 }
+#system-checks div.extra {
+  display: none;
+  margin-top: 1em;
+}
+#system-checks div.showhide {
+  display: none;
+  font-size: 85%;
+}
 #system-checks .pre {
   margin: 1em;
   font-family: monospace;
@@ -36,15 +44,19 @@ function show_system() {
       console.log(r)
       $('#system-checks tbody').html("");
       for (var i = 0; i < r.length; i++) {
-        var n = $("<tr><td class='status'/><td class='message'><p style='margin: 0'/><div/></tr>");
+        var n = $("<tr><td class='status'/><td class='message'><p style='margin: 0'/><div class='extra'/><div class='showhide'/></tr>");
         n.addClass(r[i].type)
         if (r[i].type == "ok") n.find('td.status').text("✓")
         if (r[i].type == "error") n.find('td.status').text("✖")
         n.find('td.message p').text(r[i].text)
         $('#system-checks tbody').append(n);
 
+        if (r[i].extra.length > 0) {
+          n.find('div.showhide').show().text("more");
+        }
+
         for (var j = 0; j < r[i].extra.length; j++) {
-          n.find('> td.message > div').css({ marginTop: "1em" });
+
           var m = $("<div style='max-width: 50em; word-wrap: break-word;'/>").text(r[i].extra[j].text)
           if (r[i].extra[j].monospace)
             m.addClass("pre");
