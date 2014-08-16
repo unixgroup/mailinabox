@@ -164,12 +164,20 @@ def dns_update():
 	except Exception as e:
 		return (str(e), 500)
 
-@app.route('/dns/ds')
+@app.route('/dns/dump')
 @authorized_personnel_only
-def dns_get_ds_records():
-	from dns_update import get_ds_records
+def dns_get_dump():
+	from dns_update import build_recommended_dns
 	try:
-		return get_ds_records(env).replace("\t", " ") # tabs confuse godaddy
+		return json_response([
+			{
+				"qname": qname,
+				"rtype": rtype,
+				"value": value,
+				"explanation": explanation,
+			}
+			for qname, rtype, value, explanation in build_recommended_dns(env)
+		])
 	except Exception as e:
 		return (str(e), 500)
 

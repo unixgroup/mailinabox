@@ -1,4 +1,4 @@
-<h2>System Checks</h2>
+<h2>System Status Checks</h2>
 
 <style>
 #system-checks .heading td {
@@ -41,7 +41,7 @@
 </table>
 
 <script>
-function show_system() {
+function show_system_status() {
   $('#system-checks tbody').html("<tr><td colspan='2' class='text-muted'>Loading...</td></tr>")
   api(
     "/system/status",

@@ -71,7 +71,13 @@
         </div>
         <div class="navbar-collapse collapse">
           <ul class="nav navbar-nav">
-            <li class="active"><a href="#system" onclick="return show_panel(this);">System</a></li>
+            <li class="dropdown active">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown">System <b class="caret"></b></a>
+              <ul class="dropdown-menu">
+                <li><a href="#system_status" onclick="return show_panel(this);">Status Checks</a></li>
+                <li><a href="#system_external_dns" onclick="return show_panel(this);">External DNS (Advanced)</a></li>
+              </ul>
+            </li>
             <li class="dropdown active">
               <a href="#" class="dropdown-toggle" data-toggle="dropdown">Mail <b class="caret"></b></a>
               <ul class="dropdown-menu">
@@ -95,8 +101,12 @@
     </div>
 
     <div class="container-fluid">
-      <div id="panel_system" class="container panel">
-      {% include "system.html" %}
+      <div id="panel_system_status" class="container panel">
+      {% include "system-status.html" %}
+      </div>
+
+      <div id="panel_system_external_dns" class="container panel">
+      {% include "system-external-dns.html" %}
       </div>
 
       <div id="panel_login" class="panel">
