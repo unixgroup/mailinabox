@@ -4,6 +4,11 @@
 #system-checks .heading td {
   font-weight: bold;
   font-size: 120%;
+  padding-top: 1.5em;
+}
+#system-checks .heading.first td {
+  border-top: none;
+  padding-top: 0;
 }
 #system-checks .error td {
   color: #733;
@@ -14,8 +19,10 @@
 #system-checks div.extra {
   display: none;
   margin-top: 1em;
+  max-width: 50em;
+  word-wrap: break-word;
 }
-#system-checks div.showhide {
+#system-checks a.showhide {
   display: none;
   font-size: 85%;
 }
@@ -43,7 +50,8 @@ function show_system() {
     function(r) {
       $('#system-checks tbody').html("");
       for (var i = 0; i < r.length; i++) {
-        var n = $("<tr><td class='status'/><td class='message'><p style='margin: 0'/><div class='extra'/><div class='showhide'/></tr>");
+        var n = $("<tr><td class='status'/><td class='message'><p style='margin: 0'/><div class='extra'/><a class='showhide' href='#'/></tr>");
+        if (i == 0) n.addClass('first')
         n.addClass(r[i].type)
         if (r[i].type == "ok") n.find('td.status').text("✓")
         if (r[i].type == "error") n.find('td.status').text("✖")
@@ -51,12 +59,16 @@ function show_system() {
         $('#system-checks tbody').append(n);
 
         if (r[i].extra.length > 0) {
-          n.find('div.showhide').show().text("more");
+          n.find('a.showhide').show().text("show more").click(function() {
+            $(this).hide();
+            $(this).parent().find('.extra').fadeIn();
+            return false;
+          });
         }
 
         for (var j = 0; j < r[i].extra.length; j++) {
 
-          var m = $("<div style='max-width: 50em; word-wrap: break-word;'/>").text(r[i].extra[j].text)
+          var m = $("<div/>").text(r[i].extra[j].text)
           if (r[i].extra[j].monospace)
             m.addClass("pre");
           n.find('> td.message > div').append(m);
