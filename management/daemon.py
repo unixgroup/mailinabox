@@ -99,7 +99,7 @@ def mail_users():
 @app.route('/mail/users/add', methods=['POST'])
 @authorized_personnel_only
 def mail_users_add():
-	return add_mail_user(request.form.get('email', ''), request.form.get('password', ''), env)
+	return add_mail_user(request.form.get('email', ''), request.form.get('password', ''), request.form.get('privileges', ''), env)
 
 @app.route('/mail/users/password', methods=['POST'])
 @authorized_personnel_only
@@ -133,7 +133,10 @@ def mail_user_privs_remove():
 @app.route('/mail/aliases')
 @authorized_personnel_only
 def mail_aliases():
-    return "".join(x+"\t"+y+"\n" for x, y in get_mail_aliases(env))
+	if request.args.get("format", "") == "json":
+		return json_response(get_mail_aliases(env, as_json=True))
+	else:
+		return "".join(x+"\t"+y+"\n" for x, y in get_mail_aliases(env))
 
 @app.route('/mail/aliases/add', methods=['POST'])
 @authorized_personnel_only

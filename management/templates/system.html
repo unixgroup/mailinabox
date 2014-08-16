@@ -41,7 +41,6 @@ function show_system() {
     "POST",
     { },
     function(r) {
-      console.log(r)
       $('#system-checks tbody').html("");
       for (var i = 0; i < r.length; i++) {
         var n = $("<tr><td class='status'/><td class='message'><p style='margin: 0'/><div class='extra'/><div class='showhide'/></tr>");

@@ -49,21 +49,26 @@ def open_database(env, with_connection=False):
 def get_mail_users(env, as_json=False):
 	c = open_database(env)
 	c.execute('SELECT email, privileges FROM users')
+
+	# turn into a list of tuples, but sorted by domain & email address
+	users = { row[0]: row[1] for row in c.fetchall() } # make dict
+	users = [ (email, users[email]) for email in utils.sort_email_addresses(users.keys(), env) ]
+
 	if not as_json:
-		return [row[0] for row in c.fetchall()]
+		return [email for email, privileges in users]
 	else:
 		aliases = get_mail_alias_map(env)
 		return [
 			{
-				"email": row[0],
-				"privileges": parse_privs(row[1]),
+				"email": email,
+				"privileges": parse_privs(privileges),
 				"status": "active",
 				"aliases": [
 					(alias, sorted(evaluate_mail_alias_map(alias, aliases, env)))
-					for alias in aliases.get(row[0].lower(), [])
+					for alias in aliases.get(email.lower(), [])
 					]
 			}
-			for row in c.fetchall()
+			for email, privileges in users
 			 ]
 
 def get_archived_mail_users(env):
@@ -81,10 +86,20 @@ def get_archived_mail_users(env):
 			})
 	return ret
 
-def get_mail_aliases(env):
+def get_mail_aliases(env, as_json=False):
 	c = open_database(env)
 	c.execute('SELECT source, destination FROM aliases')
-	return [(row[0], row[1]) for row in c.fetchall()]
+	aliases = { row[0]: row[1] for row in c.fetchall() } # make dict
+	aliases = [ (source, aliases[source]) for source in utils.sort_email_addresses(aliases.keys(), env) ] # sort
+	if as_json:
+		aliases = [
+			{
+				"source": alias[0],
+				"destination": [d.strip() for d in alias[1].split(",")],
+			}
+			for alias in aliases
+		]
+	return aliases
 
 def get_mail_alias_map(env):
 	aliases = { }
@@ -109,9 +124,29 @@ def get_mail_domains(env, filter_aliases=lambda alias : True):
 		 + [get_domain(source) for source, target in get_mail_aliases(env) if filter_aliases((source, target)) ]
 		 )
 
-def add_mail_user(email, pw, env):
+def add_mail_user(email, pw, privs, env):
+	# validate email
+	if email.strip() == "":
+		return ("No email address provided.", 400)
 	if not validate_email(email, mode='user'):
 		return ("Invalid email address.", 400)
+
+	# validate password
+	if pw.strip() == "":
+		return ("No password provided.", 400)
+	if re.search(r"[\s]", pw):
+		return ("Passwords cannot contain spaces.", 400)
+	if len(pw) < 4:
+		return ("Passwords must be at least four characters.", 400)
+
+	# validate privileges
+	if privs is None or privs.strip() == "":
+		privs = []
+	else:
+		privs = privs.split("\n")
+		for p in privs:
+			validation = validate_privilege(p)
+			if validation: return validation
 
 	# get the database
 	conn, c = open_database(env, with_connection=True)
@@ -121,7 +156,8 @@ def add_mail_user(email, pw, env):
 
 	# add the user to the database
 	try:
-		c.execute("INSERT INTO users (email, password) VALUES (?, ?)", (email, pw))
+		c.execute("INSERT INTO users (email, password, privileges) VALUES (?, ?, ?)",
+			(email, pw, "\n".join(privs)))
 	except sqlite3.IntegrityError:
 		return ("User already exists.", 400)
 
@@ -181,13 +217,21 @@ def get_mail_user_privileges(email, env):
 		return ("That's not a user (%s)." % email, 400)
 	return parse_privs(rows[0][0])
 
-def add_remove_mail_user_privilege(email, priv, action, env):
+def validate_privilege(priv):
 	if "\n" in priv or priv.strip() == "":
 		return ("That's not a valid privilege (%s)." % priv, 400)
+	return None
 
+def add_remove_mail_user_privilege(email, priv, action, env):
+	# validate
+	validation = validate_privilege(priv)
+	if validation: return validation
+
+	# get existing privs, but may fail
 	privs = get_mail_user_privileges(email, env)
 	if isinstance(privs, tuple): return privs # error
 
+	# update privs set
 	if action == "add":
 		if priv not in privs:
 			privs.append(priv)
@@ -196,6 +240,7 @@ def add_remove_mail_user_privilege(email, priv, action, env):
 	else:
 		return ("Invalid action.", 400)
 
+	# commit to database
 	conn, c = open_database(env, with_connection=True)
 	c.execute("UPDATE users SET privileges=? WHERE email=?", ("\n".join(privs), email))
 	if c.rowcount != 1:
@@ -205,8 +250,23 @@ def add_remove_mail_user_privilege(email, priv, action, env):
 	return "OK"
 
 def add_mail_alias(source, destination, env, do_kick=True):
+	# validate source
+	if source.strip() == "":
+		return ("No incoming email address provided.", 400)
 	if not validate_email(source, mode='alias'):
-		return ("Invalid email address.", 400)
+		return ("Invalid incoming email address (%s)." % source, 400)
+
+	# parse comma and \n-separated destination emails & validate
+	if destination.strip() == "":
+		return ("No destination email address(es) provided.", 400)
+	dests = []
+	for line in destination.split("\n"):
+		for email in line.split(","):
+			email = email.strip()
+			if not validate_email(email, mode='alias'):
+				return ("Invalid destination email address (%s)." % email, 400)
+			dests.append(email)
+	destination = ",".join(dests)
 
 	conn, c = open_database(env, with_connection=True)
 	try:

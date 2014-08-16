@@ -14,6 +14,9 @@
 
         <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
         <style>
+            @import url(https://fonts.googleapis.com/css?family=Raleway:400,700);
+            @import url(https://fonts.googleapis.com/css?family=Ubuntu:300);
+
             body {
                 padding-top: 50px;
                 padding-bottom: 20px;
@@ -23,8 +26,21 @@
               margin-bottom: 1.25em;
             }
 
+            h1, h2, h3 {
+              font-family: Raleway, sans-serif;
+              font-weight: bold;
+            }
+
             h2 {
               margin: 1em 0;
+            }
+
+            h3 {
+              font-size: 130%;
+              border-bottom: 1px solid black;
+              padding-bottom: 3px;
+              margin-bottom: 13px;
+              margin-top: 26px;
             }
 
             .panel {
@@ -61,6 +77,7 @@
               <ul class="dropdown-menu">
                 <li><a href="#mail-guide" onclick="return show_panel(this);">Instructions</a></li>
                 <li><a href="#users" onclick="return show_panel(this);">Users</a></li>
+                <li><a href="#aliases" onclick="return show_panel(this);">Aliases</a></li>
                 <!--<li><a href="#">Another action</a></li>
                 <li><a href="#">Something else here</a></li>
                 <li class="divider"></li>
@@ -94,6 +111,10 @@
       {% include "users.html" %}
       </div>
 
+      <div id="panel_aliases" class="container panel">
+      {% include "aliases.html" %}
+      </div>
+
       <hr>
 
       <footer>
@@ -101,7 +122,14 @@
       </footer>
     </div> <!-- /container -->
 
-        <div id="error_modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="errorModalTitle" aria-hidden="true">
+        <div id="ajax_loading_indicator" style="display: none; position: absolute; left: 0; top: 0; width: 100%; height: 100%; text-align: center; background-color: rgba(255,255,255,.75)">
+          <div style="margin: 20% auto">
+            <div><span class="glyphicon glyphicon-time"></span></div>
+            <div>Loading...</div>
+          </div>
+        </div>
+
+        <div id="global_modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="errorModalTitle" aria-hidden="true">
           <div class="modal-dialog modal-sm">
             <div class="modal-content">
               <div class="modal-header">
@@ -113,15 +141,9 @@
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal">OK</button>
+                <button type="button" class="btn btn-danger" data-dismiss="modal">Yes</button>
               </div>
             </div>
-          </div>
-        </div>
-    
-        <div id="ajax_loading_indicator" style="display: none; position: absolute; left: 0; top: 0; width: 100%; height: 100%; text-align: center; background-color: rgba(255,255,255,.75)">
-          <div style="margin: 20% auto">
-            <div><span class="glyphicon glyphicon-time"></span></div>
-            <div>Loading...</div>
           </div>
         </div>
 
@@ -129,10 +151,59 @@
         <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
 
         <script>
-function show_modal_error(title, message) {
-  $('#error_modal h4').text(title);
-  $('#error_modal p').text(message);
-  $('#error_modal').modal({});
+var global_modal_state = null;
+var global_modal_funcs = null;
+
+$(function() {
+  $('#global_modal .btn-danger').click(function() {
+    // Don't take action now. Wait for the modal to be totally hidden
+    // so that we don't attempt to show another modal while this one
+    // is closing.
+    global_modal_state = 0; // OK
+  })
+  $('#global_modal .btn-default').click(function() {
+    global_modal_state = 1; // Cancel
+  })
+  $('#global_modal').on('hidden.bs.modal', function (e) {
+    // do the cancel function
+    if (global_modal_state == null) global_modal_state = 1; // cancel if the user hit ESC or clicked outside of the modal
+    if (global_modal_funcs && global_modal_funcs[global_modal_state])
+      global_modal_funcs[global_modal_state]();
+  })  
+})
+
+function show_modal_error(title, message, callback) {
+  $('#global_modal h4').text(title);
+  $('#global_modal .modal-body').html("<p/>");
+  if (typeof question == String) {
+    $('#global_modal p').text(message);
+    $('#global_modal .modal-dialog').addClass("modal-sm");
+  } else {
+    $('#global_modal p').html("").append(message);
+    $('#global_modal .modal-dialog').removeClass("modal-sm");
+  }
+  $('#global_modal .btn-default').show().text("OK");
+  $('#global_modal .btn-danger').hide();
+  global_modal_funcs = [callback, callback];
+  global_modal_state = null;
+  $('#global_modal').modal({});
+}
+
+function show_modal_confirm(title, question, verb, yes_callback, cancel_callback) {
+  $('#global_modal h4').text(title);
+  if (typeof question == String) {
+    $('#global_modal .modal-dialog').addClass("modal-sm");
+    $('#global_modal .modal-body').html("<p/>");
+    $('#global_modal p').text(question);
+  } else {
+    $('#global_modal .modal-dialog').removeClass("modal-sm");
+    $('#global_modal .modal-body').html("").append(question);
+  }
+  $('#global_modal .btn-default').show().text("Cancel");
+  $('#global_modal .btn-danger').show().text(verb);
+  global_modal_funcs = [yes_callback, cancel_callback];
+  global_modal_state = null;
+  $('#global_modal').modal({});
 }
 
 var is_ajax_loading = false;
@@ -151,16 +222,18 @@ function ajax(options) {
     else if (old_success)
       old_success(data);
   };
-  options.error = function() {
+  options.error = function(jqxhr) {
     hide_loading_indicator();
-    show_modal_error("Error", "Something went wrong, sorry.")
-    if (old_error) old_error();
+    if (!old_error) 
+      show_modal_error("Error", "Something went wrong, sorry.")
+    else
+      old_error(jqxhr.responseText);
   };
   is_ajax_loading = true;
   $.ajax(options);
 }
 
-function api(url, method, data, callback) {
+function api(url, method, data, callback, callback_error) {
   // from http://www.webtoolkit.info/javascript-base64.html
   function base64encode(input) {
     _keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -202,6 +275,7 @@ function api(url, method, data, callback) {
           'Basic ' + base64encode(api_credentials[0] + ':' + api_credentials[1]));
     },
     success: callback,
+    error: callback_error,
     statusCode: {
       403: function(xhr) {
         // Credentials are no longer valid. Try to login again.
