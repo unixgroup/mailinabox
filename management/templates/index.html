@@ -161,11 +161,46 @@ function ajax(options) {
 }
 
 function api(url, method, data, callback) {
+  // from http://www.webtoolkit.info/javascript-base64.html
+  function base64encode(input) {
+    _keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    var output = "";
+    var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+    var i = 0;
+    while (i < input.length) {
+        chr1 = input.charCodeAt(i++);
+        chr2 = input.charCodeAt(i++);
+        chr3 = input.charCodeAt(i++);
+        enc1 = chr1 >> 2;
+        enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        enc4 = chr3 & 63;
+        if (isNaN(chr2)) {
+            enc3 = enc4 = 64;
+        } else if (isNaN(chr3)) {
+            enc4 = 64;
+        }
+        output = output +
+        _keyStr.charAt(enc1) + _keyStr.charAt(enc2) +
+        _keyStr.charAt(enc3) + _keyStr.charAt(enc4);
+    }
+
+    return output;
+  }
+
   ajax({
     url: "/admin" + url,
     method: method,
     data: data,
-    beforeSend: function(xhr) { xhr.setRequestHeader('Authorization', api_key); },
+    beforeSend: function(xhr) {
+      // We don't store user credentials in a cookie to avoid the hassle of CSRF
+      // attacks. The Authorization header only gets set in our AJAX calls triggered
+      // by user actions.
+      if (api_credentials)
+        xhr.setRequestHeader(
+          'Authorization',
+          'Basic ' + base64encode(api_credentials[0] + ':' + api_credentials[1]));
+    },
     success: callback,
     statusCode: {
       403: function(xhr) {
@@ -189,7 +224,8 @@ function show_panel(panelid) {
   $('#panel_' + panelid).show();
   if (typeof localStorage != 'undefined')
     localStorage.setItem("miab-cp-lastpanel", panelid);
-  window["show_" + panelid]();
+  if (window["show_" + panelid])
+    window["show_" + panelid]();
 
   current_panel = panelid;
   switch_back_to_panel = null;
@@ -198,11 +234,11 @@ function show_panel(panelid) {
 }
 
 $(function() {
-  // Recall a saved key.
-  if (typeof sessionStorage != 'undefined' && sessionStorage.getItem("miab-cp-apikey"))
-    api_key = sessionStorage.getItem("miab-cp-apikey");
-  else if (typeof localStorage != 'undefined' && localStorage.getItem("miab-cp-apikey"))
-    api_key = localStorage.getItem("miab-cp-apikey");
+  // Recall saved user credentials.
+  if (typeof sessionStorage != 'undefined' && sessionStorage.getItem("miab-cp-credentials"))
+    api_credentials = sessionStorage.getItem("miab-cp-credentials").split(":");
+  else if (typeof localStorage != 'undefined' && localStorage.getItem("miab-cp-credentials"))
+    api_credentials = localStorage.getItem("miab-cp-credentials").split(":");
 
   // Recall what the user was last looking at.
   if (typeof localStorage != 'undefined' && localStorage.getItem("miab-cp-lastpanel")) {

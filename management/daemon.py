@@ -28,12 +28,29 @@ app = Flask(__name__, template_folder=os.path.abspath(os.path.join(os.path.dirna
 def authorized_personnel_only(viewfunc):
 	@wraps(viewfunc)
 	def newview(*args, **kwargs):
-		if not auth_service.is_authenticated(request):
+		# Check if the user is authorized.
+		authorized_status = auth_service.is_authenticated(request, env)
+		if authorized_status != "OK":
+			status = 401
+			headers = { 'WWW-Authenticate': 'Basic realm="{0}"'.format(auth_service.auth_realm) }
+
 			if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
 				# Don't issue a 401 to an AJAX request because the user will
 				# be prompted for credentials, which is not helpful.
-				abort(403)
-			abort(401)
+				status = 403
+				headers = None
+
+			if request.headers.get('Accept') in (None, "", "*/*"):
+				# Return plain text output.
+				return Response(authorized_status+"\n", status=status, mimetype='text/plain', headers=headers)
+			else:
+				# Return JSON output.
+				return Response(json.dumps({
+					"status": "error",
+					"reason": authorized_status
+					}+"\n"), status=status, mimetype='application/json', headers=headers)
+
+		# Authorized. Call view func.	
 		return viewfunc(*args, **kwargs)
 	return newview
 
@@ -56,61 +73,18 @@ def index():
     	hostname=env['PRIMARY_HOSTNAME'],
     )
 
-@app.route('/login', methods=['POST'])
-def login():
-	# Validate the user's credentials and return the daemon's API key
-	# (to be used as a shared secret).
-	#
-	# To avoid CSRF attacks, we do not store user credentials in a cookie.
-	# This method is intended to be called via AJAX.
-	#
-	# This route does not require authentication so it must be safe.
-
-	# Get form fields.
-	email = request.form.get('email', '').strip()
-	pw = request.form.get('password', '').strip()
-
-	if email == "" or pw == "":
+@app.route('/me')
+def me():
+	# Is the caller authorized?
+	authorized_status = auth_service.is_authenticated(request, env)
+	if authorized_status != "OK":
 		return json_response({
-			"status": "error",
-			"message": "Enter an email address and password."
+			"status": "not-authorized",
+			"reason": authorized_status
 			})
-
-	# Authenticate.
-	try:
-		# Use doveadm to check credentials. doveadm will return
-		# a non-zero exit status if the credentials are no good,
-		# and check_call will raise an exception in that case.
-		utils.shell('check_call', [
-			"/usr/bin/doveadm",
-			"auth", "test",
-			email, pw
-			])
-	except:
-		# Login failed.
-		return json_response({
-			"status": "error",
-			"message": "Invalid email address or password."
-			})
-
-	# Authorize.
-	# (This call should never fail on a valid user.)
-	privs = get_mail_user_privileges(email, env)
-	if isinstance(privs, tuple): raise Exception("Error getting privileges.")
-	if "admin" not in privs:
-		return json_response({
-			"status": "error",
-			"message": "You are not an administrator for this system."})
-
-	# User is authenticated & authorized.
-	# Provide the user the exact string it should put in the Authorization:
-	# header, since it is a little difficult to form in Javascript.
-	key = 'Basic ' + base64.b64encode(auth_service.key.encode("ascii") + b':').decode("ascii")
 	return json_response({
-		"status": "ok",
-		"key": key
+		"status": "authorized",
 		})
-
 
 # MAIL
 

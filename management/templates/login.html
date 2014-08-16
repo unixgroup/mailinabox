@@ -37,37 +37,50 @@
 </div>
 
 <script>
-var api_key = null;
+var api_credentials = null;
 function do_login() {
-  api(
-  "/login",
-  "POST",
-  {
-    email: $('#loginEmail').val(),
-    password: $('#loginPassword').val()
-  },
-  function(response){ 
-    if (typeof localStorage != 'undefined' && typeof sessionStorage != 'undefined') {
-      if ($('#loginRemember').val()) {
-        localStorage.setItem("miab-cp-apikey", response.key);
-        sessionStorage.removeItem("miab-cp-apikey");
-      } else {
-        localStorage.removeItem("miab-cp-apikey");
-        sessionStorage.setItem("miab-cp-apikey", response.key);
-      }
+  if ($('#loginEmail').val() == "") {
+    show_modal_error("Login Failed", "Enter your email address.")
+    return false;
+  }
+  if ($('#loginPassword').val() == "") {
+    show_modal_error("Login Failed", "Enter your email password.")
+    return false;
+  }
+
+  api_credentials = [$('#loginEmail').val(), $('#loginPassword').val()];
+
+  if (typeof localStorage != 'undefined' && typeof sessionStorage != 'undefined') {
+    if ($('#loginRemember').val()) {
+      localStorage.setItem("miab-cp-credentials", api_credentials.join(":"));
+      sessionStorage.removeItem("miab-cp-credentials");
+    } else {
+      localStorage.removeItem("miab-cp-credentials");
+      sessionStorage.setItem("miab-cp-credentials", api_credentials.join(":"));
     }
+  }
 
-    api_key = response.key;
+  api(
+    "/me",
+    "GET",
+    { },
+    function(response){ 
+      if (response.status != "authorized") {
+        show_modal_error("Login Failed", response.reason)
+      } else {
+        show_panel(!switch_back_to_panel ? 'mail-guide' : switch_back_to_panel)
+      }
+    })
 
-    show_panel(!switch_back_to_panel ? 'mail-guide' : switch_back_to_panel)
-  })
+  return false;
 }
 
 function do_logout() {
+  api_credentials = null;
   if (typeof localStorage != 'undefined')
-    localStorage.removeItem("miab-cp-apikey");
+    localStorage.removeItem("miab-cp-credentials");
   if (typeof sessionStorage != 'undefined')
-    sessionStorage.removeItem("miab-cp-apikey");
+    sessionStorage.removeItem("miab-cp-credentials");
   show_panel('login');
 }
 </script>
