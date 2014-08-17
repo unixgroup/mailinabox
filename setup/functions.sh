@@ -125,5 +125,10 @@ function ufw_allow {
 }
 
 function restart_service {
-	hide_output service $1 restart
+	# Restart a service quietly. On docker, don't bother because
+	# services are managed a totally different way and aren't run
+	# during image creation.
+	if [ -z "$NO_RESTART_SERVICES" ]; then
+		hide_output service $1 restart
+	fi
 }
