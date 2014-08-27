@@ -18,7 +18,7 @@ source /etc/mailinabox.conf # load global vars
 apt_install \
 	dbconfig-common \
 	php5 php5-sqlite php5-mcrypt php5-intl php5-json php5-common php-auth php-net-smtp php-net-socket php-net-sieve php-mail-mime php-crypt-gpg php5-gd php5-pspell \
-	tinymce libjs-jquery libjs-jquery-mousewheel libmagic1
+	tinymce libjs-jquery libjs-jquery-mousewheel libmagic1 unzip
 
 # We used to install Roundcube from Ubuntu, without triggering the dependencies
 # on Apache and MySQL, by downloading the debs and installing them manually.
@@ -33,7 +33,21 @@ if [ ! -d /usr/local/lib/roundcubemail ]; then
 	tar -C /usr/local/lib -zxf /tmp/roundcube.tgz
 	mv /usr/local/lib/roundcubemail-1.0.1/ /usr/local/lib/roundcubemail
 	rm -f /tmp/roundcube.tgz
+	
+	#Install Pluginmanager and Carddav Plugin
+
+	wget -qO /tmp/pluginmanager.zip http://dev.myroundcube.com/?_action=plugin.plugin_server_get_pm
+	unzip /tmp/pluginmanager.zip
+	mv /tmp/plugins/* /usr/local/lib/roundcubemail/plugins/
+		
+	rm -rf /tmp/rcmcarddav
+	mkdir /tmp/rcmcarddav
+	git clone https://github.com/blind-coder/rcmcarddav.git /tmp/rcmcarddav
+	mv /tmp/rcmcarddav /usr/local/lib/roundcubemail/plugins/carddav
+	chown -R www-data:www-data /usr/local/lib/roundcubemail/plugins
 fi
+
+
 
 # Generate a safe 24-character secret key of safe characters.
 SECRET_KEY=$(dd if=/dev/random bs=1 count=18 2>/dev/null | base64 | fold -w 24 | head -n 1)
@@ -62,7 +76,7 @@ cat - > /usr/local/lib/roundcubemail/config/config.inc.php <<EOF;
 \$config['support_url'] = 'https://mailinabox.email/';
 \$config['product_name'] = 'Mail-in-a-Box/Roundcube Webmail';
 \$config['des_key'] = '$SECRET_KEY';
-\$config['plugins'] = array('archive', 'zipdownload', 'password', 'managesieve');
+\$config['plugins'] = array('archive', 'zipdownload', 'password', 'managesieve','plugin-manager','carddav');
 \$config['skin'] = 'classic';
 \$config['login_autocomplete'] = 2;
 \$config['password_charset'] = 'UTF-8';
