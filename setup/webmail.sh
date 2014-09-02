@@ -37,7 +37,7 @@ if [ ! -d /usr/local/lib/roundcubemail ]; then
 	#Install Pluginmanager and Carddav Plugin
 
 	wget -qO /tmp/pluginmanager.zip http://dev.myroundcube.com/?_action=plugin.plugin_server_get_pm
-	unzip /tmp/pluginmanager.zip
+	unzip /tmp/pluginmanager.zip -d /tmp
 	mv /tmp/plugins/* /usr/local/lib/roundcubemail/plugins/
 		
 	rm -rf /tmp/rcmcarddav
@@ -76,7 +76,7 @@ cat - > /usr/local/lib/roundcubemail/config/config.inc.php <<EOF;
 \$config['support_url'] = 'https://mailinabox.email/';
 \$config['product_name'] = 'Mail-in-a-Box/Roundcube Webmail';
 \$config['des_key'] = '$SECRET_KEY';
-\$config['plugins'] = array('archive', 'zipdownload', 'password', 'managesieve','plugin-manager','carddav');
+\$config['plugins'] = array('plugin-manager'); 
 \$config['skin'] = 'classic';
 \$config['login_autocomplete'] = 2;
 \$config['password_charset'] = 'UTF-8';
